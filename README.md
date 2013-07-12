@@ -1,5 +1,6 @@
 #RSSBoard
 Built with [Play Framework 2](http://playframework.org), [Brunch](http://brunch.io), [Chaplin](http://chaplinjs.org)
+Based on Julien Bille's work : https://github.com/julienba/dashboard 
 
 
 
