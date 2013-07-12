@@ -1,10 +1,23 @@
-logs
-project/project
-project/target
-target
-tmp
-.history
-dist
+# Numerous always-ignore extensions
+*.diff
+*.err
+*.orig
+*.log
+*.rej
+*.swo
+*.swp
+*.vi
+*~
+*.sass-cache
+
+# OS or Editor folders
+.DS_Store
+.cache
+.project
+.settings
+.tmproj
+nbproject
+Thumbs.db
 /.idea
 /*.iml
 /out
@@ -13,9 +26,27 @@ dist
 /.project
 /bin
 /RUNNING_PID
-conf/cloud.conf
-manifest.yml
 .cache
 .settings
 .target
 
+logs
+project/project
+project/target
+target
+tmp
+.history
+dist
+/bin
+/RUNNING_PID
+conf/cloud.conf
+manifest.yml
+
+# NPM packages folder.
+node_modules/
+
+# Brunch folder for temporary files.
+tmp/
+
+# Brunch output folder.
+public/

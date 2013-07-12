@@ -3,8 +3,12 @@ log = (args...) ->
     console.log.apply console, args if console.log?
 
 document.username = decodeURIComponent( document.cookie.split('mail%3A')[1] )
-# ---------------------------------------- ROUTER
 
+$ ->
+
+#
+# ---------------------------------------- ROUTER
+#
 class AppRouter extends Backbone.Router
     initialize: ->
         log 'init router'
@@ -19,16 +23,16 @@ class AppRouter extends Backbone.Router
         # move to first Tab
         lastTabId = localStorage.getItem("tabId")
         if lastTabId?
-            tabs.views[lastTabId].display2(lastTabId)
+            app.tabs.views[lastTabId].display2(lastTabId)
         else
-            if tabs.models.length > 0
-                tabId = tabs.models[0].id
-                tabs.views[tabId].display2(tabId)
+            if app.tabs.models.length > 0
+                tabId = app.tabs.models[0].id
+                app.tabs.views[tabId].display2(tabId)
 
     tabs: (id) ->
         log "route tab: #{id}"
-        if tabs.views[id]
-            tabs.views[id].display2(id)
+        if app.tabs.views[id]
+            app.tabs.views[id].display2(id)
 
     dummy: ->
         log 'do nothing'
@@ -45,9 +49,9 @@ class Module extends Backbone.Model
 
 class TabList extends Backbone.Collection
     initialize: (models, options) ->
-        @.on('add', @addOne, @)
-        @.on('reset', @addAll, @)
-        @.on('all', @render, @)
+        @on('add', @addOne, @)
+        @on('reset', @addAll, @)
+        @on('all', @render, @)
 
     model: Tab
 
@@ -68,7 +72,7 @@ class TabList extends Backbone.Collection
     addAll: ->
         log 'addAll'
         $('#tabs-list').html('')
-        tabs.each(@.addOne, @)
+        app.tabs.each(@.addOne, @)
 
     render: ->
         log 'render TabList'
@@ -91,7 +95,77 @@ class ModuleList extends Backbone.Collection
             view = new ModuleView({model: model})
             $("#modules").append( view.render().el )
 
-# ---------------------------------------- VIEW
+
+
+#
+# ---------------------------------------- VIEWS
+#
+
+# APP VIEW
+class AppView extends Backbone.View
+    initialize: ->
+      @tabs = new TabList
+      log @tabs
+      @tabs.fetch
+          success: ->
+              log "fetch success"
+              @router = new AppRouter
+              Backbone.history.start
+                  pushHistory: true
+
+    events:
+        'click #show-modal'                   : 'showModal'
+        'click #show-import-feeds'            : 'showImportFeeds'
+        'click #show-new-module'              : 'showNewModule'
+        
+    showModal: ->
+        action = (data)->
+            jsRoutes.controllers.Tabs.save(document.username).ajax
+                context: @
+                data: data
+                success: (result) ->
+                    @tabs.addOne(new Tab(result))
+                error: (err) ->
+                    log 'ERROR'
+                    log err
+
+        model = new Backbone.Model
+        view = new ModalView({ mName: 'modal/createTab', model: model, action : action})
+        view.show()
+
+
+    showImportFeeds: ->
+        model = new Backbone.Model({ username: document.username })
+        view = new ModalView({ mName: 'modal/importFeeds', model: model})
+        view.show()
+
+        
+    showNewModule: ->
+        e.preventDefault
+        action = (data)->
+            jsRoutes.controllers.Modules.findRSS(document.tabId).ajax
+                context: @
+                data: data
+                success: (result) ->
+                    action = (data) ->
+                        jsRoutes.controllers.Modules.create(document.tabId).ajax
+                            context: @
+                            data: data
+                        
+                    model = new Backbone.Model({urls: result})
+                    view = new ModalView({mName: 'modal/validModule', model: model, action: action})
+                    view.show()
+                error: (err) ->
+                    log 'ERROR'
+                    log err
+
+        model = new Module()
+        view = new ModalView({mName: 'modal/newModule', model: model, action: action})
+        view.show()
+        
+
+# MODULE VIEW
+
 class ModuleView extends Backbone.View
     initialize: ->
         @.model.on( 'change', @.render, @)
@@ -101,7 +175,7 @@ class ModuleView extends Backbone.View
     events:
         'click .module .action .icon-refresh' : 'updateModule'
         'click .module .action .icon-pencil'  : 'configModule'
-        'click .module .action .icon-remove'  : 'delete'
+        'click .module .action .icon-remove'  : 'removeModule'
         'click .feeds a'                      : 'markAsRead'
         'mousedown .feeds a'                  : 'markAsRead' # Tricks for middle click...
         'dragstart'                           : 'dragStart'
@@ -149,7 +223,7 @@ class ModuleView extends Backbone.View
         log "feedId: #{feedId}"
         $.get('/json/feeds/' + feedId + '/read')
 
-    delete: ->
+    removeModule: ->
         if(confirm('Sure to delete ' + @.model.get('title') + ' - ' + @.model.get('url') + ' ?'))
             log "delete: " + @.model.id
             jsRoutes.controllers.Modules.delete(document.tabId, @.model.id).ajax
@@ -210,6 +284,7 @@ class ModuleView extends Backbone.View
         false
 
 
+# TAB VIEW
 class TabView extends Backbone.View
 
     template: MUSTACHE_TEMPLATES['tabs/show']
@@ -300,8 +375,11 @@ class TabView extends Backbone.View
         localStorage.setItem("tabId", id)
         module = new ModuleList([], {tabId: id})
         module.fetch()
-        
 
+
+
+     
+# MODAL VIEW
 class ModalView extends Backbone.View
 
     events:
@@ -341,58 +419,55 @@ class ModalView extends Backbone.View
     close: ->
         this.remove()
 
-$ ->
-    # ------------------------------------------------ MODAL
-    # Create TAB
-    $('#show-modal').click (e) ->
-        action = (data)->
-            jsRoutes.controllers.Tabs.save(document.username).ajax
-                context: @
-                data: data
-                success: (result) ->
-                    tabs.addOne(new Tab(result))
-                error: (err) ->
-                    log 'ERROR'
-                    log err
-
-        model = new Backbone.Model
-        view = new ModalView({ mName: 'modal/createTab', model: model, action : action})
-        view.show()
-
-    $('#show-import-feeds').click (e) ->
-        model = new Backbone.Model({ username: document.username })
-        view = new ModalView({ mName: 'modal/importFeeds', model: model})
-        view.show()
-
-    $('#show-new-module').click (e) ->
-        e.preventDefault
-        action = (data)->
-            jsRoutes.controllers.Modules.findRSS(document.tabId).ajax
-                context: @
-                data: data
-                success: (result) ->
-                    action = (data) ->
-                        jsRoutes.controllers.Modules.create(document.tabId).ajax
-                            context: @
-                            data: data
-                        
-                    model = new Backbone.Model({urls: result})
-                    view = new ModalView({mName: 'modal/validModule', model: model, action: action})
-                    view.show()
-                error: (err) ->
-                    log 'ERROR'
-                    log err
-
-        model = new Module()
-        view = new ModalView({mName: 'modal/newModule', model: model, action: action})
-        view.show()
-
-tabs = new TabList()
-tabs.fetch
-    success: ->
-        log "fetch success"
-        window.App = new AppRouter
-        Backbone.history.start
-            pushHistory: true
 
 
+
+    app = new AppView
+    log app
+    #
+    ## ------------------------------------------------ MODAL
+    ## Create TAB
+    #$('#show-modal').click (e) ->
+    #    action = (data)->
+    #        jsRoutes.controllers.Tabs.save(document.username).ajax
+    #            context: @
+    #            data: data
+    #            success: (result) ->
+    #                tabs.addOne(new Tab(result))
+    #            error: (err) ->
+    #                log 'ERROR'
+    #                log err
+    #
+    #    model = new Backbone.Model
+    #    view = new ModalView({ mName: 'modal/createTab', model: model, action : action})
+    #    view.show()
+    #
+    #$('#show-import-feeds').click (e) ->
+    #    model = new Backbone.Model({ username: document.username })
+    #    view = new ModalView({ mName: 'modal/importFeeds', model: model})
+    #    view.show()
+    #
+    #$('#show-new-module').click (e) ->
+    #    e.preventDefault
+    #    action = (data)->
+    #        jsRoutes.controllers.Modules.findRSS(document.tabId).ajax
+    #            context: @
+    #            data: data
+    #            success: (result) ->
+    #                action = (data) ->
+    #                    jsRoutes.controllers.Modules.create(document.tabId).ajax
+    #                        context: @
+    #                        data: data
+    #                    
+    #                model = new Backbone.Model({urls: result})
+    #                view = new ModalView({mName: 'modal/validModule', model: model, action: action})
+    #                view.show()
+    #            error: (err) ->
+    #                log 'ERROR'
+    #                log err
+    #
+    #    model = new Module()
+    #    view = new ModalView({mName: 'modal/newModule', model: model, action: action})
+    #    view.show()
+    #
+    #
